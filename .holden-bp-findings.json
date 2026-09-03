@@ -1,0 +1,132 @@
+{
+  "scan_date": "2026-09-02T00:00:00Z",
+  "scan_path": ".",
+  "holden_deterministic": {
+    "passed": 210,
+    "failed": 0,
+    "unresolved": 0
+  },
+  "findings": [
+    {
+      "id": "HOLDEN_BP_001",
+      "status": "fixed",
+      "first_seen": "2026-09-02",
+      "last_seen": "2026-09-02",
+      "principle": "reliability",
+      "severity": "MEDIUM",
+      "confidence": "high",
+      "title": "Stream hardcodes backfill_all with no way to disable or exclude objects",
+      "file": "google_datastream_stream.main.tf",
+      "line": 35,
+      "resource": "google_datastream_stream.main",
+      "explanation": "backfill_all {} is unconditional: every consumer of this module triggers a full historical backfill of the entire replicated database when the stream is created, and again whenever it is recreated. On a large production MySQL source that is a sustained read load the caller cannot opt out of, throttle, or scope. The provider supports backfill_none {} and backfill_all { mysql_excluded_objects { ... } }, neither of which is reachable here.",
+      "remediation": "Add var.backfill_strategy (\"all\"|\"none\", default \"all\") selected with dynamic blocks, plus an optional var.backfill_excluded_databases feeding mysql_excluded_objects.",
+      "fixable": true
+    },
+    {
+      "id": "HOLDEN_BP_002",
+      "status": "fixed",
+      "first_seen": "2026-09-02",
+      "last_seen": "2026-09-02",
+      "principle": "reliability",
+      "severity": "LOW",
+      "confidence": "high",
+      "title": "mysql_source_config sets no concurrency limits for CDC or backfill tasks",
+      "file": "google_datastream_stream.main.tf",
+      "line": 11,
+      "resource": "google_datastream_stream.main",
+      "explanation": "max_concurrent_cdc_tasks and max_concurrent_backfill_tasks are unset, so Datastream chooses its own parallelism against the source database. Combined with the unconditional backfill in HOLDEN_BP_001, an operator has no lever to reduce load on a MySQL primary that is also serving application traffic.",
+      "remediation": "Expose var.max_concurrent_cdc_tasks and var.max_concurrent_backfill_tasks (nullable numbers, default null) and set them on mysql_source_config.",
+      "fixable": true
+    },
+    {
+      "id": "HOLDEN_BP_003",
+      "status": "fixed",
+      "first_seen": "2026-09-02",
+      "last_seen": "2026-09-02",
+      "principle": "reliability",
+      "severity": "LOW",
+      "confidence": "high",
+      "title": "source_hierarchy_datasets dataset_template has no dataset_id_prefix",
+      "file": "google_datastream_stream.main.tf",
+      "line": 27,
+      "resource": "google_datastream_stream.main",
+      "explanation": "With source_hierarchy_datasets and no dataset_id_prefix, Datastream names each destination BigQuery dataset after the source schema alone. Two streams in the same project replicating source databases that share a schema name both target the same dataset, silently interleaving two sources' tables. The module already namespaces its connection profiles and private connection with var.stream_id; the destination is the only unnamespaced surface.",
+      "remediation": "Add dataset_id_prefix to dataset_template, defaulting to a sanitised var.stream_id.",
+      "fixable": true,
+      "fix": "dataset_template {\n  location          = var.location\n  kms_key_name      = var.kms_key_name\n  dataset_id_prefix = var.dataset_id_prefix\n}"
+    },
+    {
+      "id": "HOLDEN_BP_004",
+      "status": "fixed",
+      "first_seen": "2026-09-02",
+      "last_seen": "2026-09-02",
+      "principle": "maintainability",
+      "severity": "LOW",
+      "confidence": "high",
+      "title": "include_objects is fixed to exactly one database with no table-level scoping",
+      "file": "google_datastream_stream.main.tf",
+      "line": 12,
+      "resource": "google_datastream_stream.main",
+      "explanation": "var.source_database is a single string wired into one static mysql_databases block, so replicating a second database or restricting to specific tables requires editing the module rather than passing a variable. Consumers hit this immediately on any multi-schema MySQL instance.",
+      "remediation": "Change var.source_database to list(string) (or a map of database -> tables) and generate mysql_databases with a dynamic block.",
+      "fixable": true
+    },
+    {
+      "id": "HOLDEN_BP_005",
+      "status": "fixed",
+      "first_seen": "2026-09-02",
+      "last_seen": "2026-09-02",
+      "principle": "maintainability",
+      "severity": "INFO",
+      "confidence": "high",
+      "title": "var.labels is applied only to the stream, not to the connection profiles or private connection",
+      "file": "google_datastream_connection_profile.source.tf",
+      "line": 1,
+      "resource": "google_datastream_connection_profile.source, google_datastream_connection_profile.destination, google_datastream_private_connection.main",
+      "explanation": "All four Datastream resources support labels, but only google_datastream_stream.main receives var.labels. Cost-allocation and ownership queries over the module's resources return a partial picture, and the inconsistency is invisible to a caller reading only variables.tf.",
+      "remediation": "Add labels = var.labels to both connection profiles and the private connection.",
+      "fixable": true,
+      "fix": "labels = var.labels"
+    },
+    {
+      "id": "HOLDEN_BP_006",
+      "status": "fixed",
+      "first_seen": "2026-09-02",
+      "last_seen": "2026-09-02",
+      "principle": "repeatability",
+      "severity": "LOW",
+      "confidence": "medium",
+      "title": "No project variable; every resource inherits the provider's default project",
+      "file": "variables.tf",
+      "line": 1,
+      "resource": "module root",
+      "explanation": "None of the four resources set project, so the module can only deploy into whatever project the ambient google provider resolves. A root config managing several projects must define an aliased provider per project and pass it in, rather than varying an input.",
+      "remediation": "Add variable \"project\" { type = string, default = null } and set project = var.project on all four resources; null preserves today's provider-inherited behaviour.",
+      "fixable": true
+    },
+    {
+      "id": "HOLDEN_BP_007",
+      "status": "fixed",
+      "first_seen": "2026-09-02",
+      "last_seen": "2026-09-02",
+      "principle": "maintainability",
+      "severity": "INFO",
+      "confidence": "high",
+      "title": "Module input surface grew to 19 variables",
+      "file": "variables.tf",
+      "line": 1,
+      "resource": "tf_file.variables.tf",
+      "explanation": "Fixing BP_001/002/004/006 added six inputs, crossing HLD_TF_027 threshold of 15. Each knob is justified individually but the flat surface is now large.",
+      "remediation": "Grouped into three object-typed variables: source_mysql {hostname, port, username, password}, backfill {strategy, excluded_databases}, max_concurrent_tasks {cdc, backfill}. 19 inputs -> 14; HLD_TF_027 clears.",
+      "supersedes": "HLD_TF_027",
+      "fixable": true
+    }
+  ],
+  "suggested_policies": [
+    {
+      "rationale": "A Datastream stream writing to BigQuery via source_hierarchy_datasets with no dataset_id_prefix names destination datasets after the source schema alone, so two streams replicating same-named schemas collide into one dataset. Single unambiguous attribute path on one resource type; fires correctly on any config using source_hierarchy_datasets.",
+      "yaml": "id: HLD_GCP_XXX  # run: holden next-id --cloud GCP\nname: Datastream BigQuery hierarchy datasets should set a dataset_id_prefix\nprinciple: reliability\nseverity: LOW\nrationale: |\n  With source_hierarchy_datasets and no dataset_id_prefix, Datastream derives each\n  destination BigQuery dataset name from the source schema name alone. Two streams\n  in the same project whose sources share a schema name write into the same dataset,\n  interleaving unrelated tables and making the destination ambiguous.\nremediation: |\n  Set a prefix that namespaces the stream:\n    source_hierarchy_datasets {\n      dataset_template {\n        location          = var.location\n        dataset_id_prefix = var.stream_id\n      }\n    }\nresources:\n  google_datastream_stream:\n    path: destination_config.bigquery_destination_config.source_hierarchy_datasets.dataset_template.dataset_id_prefix\n    not_null: true\n"
+    }
+  ]
+}
