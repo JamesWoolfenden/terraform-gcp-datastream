@@ -1,111 +1,111 @@
 {
-  "scan_date": "2026-09-02T00:00:00Z",
-  "scan_path": ".",
   "deterministic_baseline": {
-    "root_scan": {
-      "passed": 210,
-      "failed": 0,
-      "unknown": 0,
-      "suppressed": 3
-    },
     "example_scan": {
-      "passed": 352,
       "failed": 1,
-      "note": "HLD_GCP_093 remains open by choice — it points at HOLDEN_AI_004; scanning the repo root does not report example findings at all"
+      "note": "HLD_GCP_093 remains open by choice \u2014 it points at HOLDEN_AI_004; scanning the repo root does not report example findings at all",
+      "passed": 352
+    },
+    "root_scan": {
+      "failed": 0,
+      "passed": 210,
+      "suppressed": 3,
+      "unknown": 0
     }
   },
   "findings": [
     {
-      "id": "HOLDEN_AI_001",
-      "status": "open",
-      "first_seen": "2026-09-02",
-      "last_seen": "2026-09-02",
-      "unresolved_since": "2026-09-02",
-      "suppression_reason": null,
-      "principle": "encryption",
-      "severity": "HIGH",
       "confidence": "high",
-      "title": "MySQL source connection has no ssl_config, so CDC replication traffic is unencrypted in transit",
+      "explanation": "mysql_profile supports an ssl_config block (ca_certificate, client_certificate, client_key, confirmed against the pinned google 7.31.0 schema) and the module never sets it, with no variable to supply one. Datastream therefore connects to the source over plaintext MySQL: the replication user's credentials and every replicated row cross the VPC peering unencrypted. holden's only Datastream rule is HLD_GCP_418, which covers CMEK at rest, so nothing in the deterministic catalog looks at transit for this resource type. Private peering limits who can observe the traffic but is not a substitute for TLS.",
       "file": "google_datastream_connection_profile.source.tf",
+      "first_seen": "2026-09-02",
+      "fix": "  mysql_profile {\n    hostname = var.source_mysql.hostname\n    port     = var.source_mysql.port\n    username = var.source_mysql.username\n    password = var.source_mysql.password\n\n    dynamic \"ssl_config\" {\n      for_each = var.source_mysql.ssl == null ? [] : [var.source_mysql.ssl]\n\n      content {\n        ca_certificate     = ssl_config.value.ca_certificate\n        client_certificate = ssl_config.value.client_certificate\n        client_key         = ssl_config.value.client_key\n      }\n    }\n  }",
+      "fixable": true,
+      "id": "HOLDEN_AI_001",
+      "last_seen": "2026-09-02",
       "line": 8,
-      "resource": "google_datastream_connection_profile.source",
+      "principle": "encryption",
       "related_resources": [
         "google_datastream_stream.main",
         "google_datastream_private_connection.main"
       ],
-      "explanation": "mysql_profile supports an ssl_config block (ca_certificate, client_certificate, client_key, confirmed against the pinned google 7.31.0 schema) and the module never sets it, with no variable to supply one. Datastream therefore connects to the source over plaintext MySQL: the replication user's credentials and every replicated row cross the VPC peering unencrypted. holden's only Datastream rule is HLD_GCP_418, which covers CMEK at rest, so nothing in the deterministic catalog looks at transit for this resource type. Private peering limits who can observe the traffic but is not a substitute for TLS.",
       "remediation": "Add an optional ssl attribute to var.source_mysql and emit a dynamic ssl_config block from it, so a caller can pin the source's CA and present a client certificate.",
-      "fixable": true,
-      "fix": "  mysql_profile {\n    hostname = var.source_mysql.hostname\n    port     = var.source_mysql.port\n    username = var.source_mysql.username\n    password = var.source_mysql.password\n\n    dynamic \"ssl_config\" {\n      for_each = var.source_mysql.ssl == null ? [] : [var.source_mysql.ssl]\n\n      content {\n        ca_certificate     = ssl_config.value.ca_certificate\n        client_certificate = ssl_config.value.client_certificate\n        client_key         = ssl_config.value.client_key\n      }\n    }\n  }"
+      "resource": "google_datastream_connection_profile.source",
+      "severity": "HIGH",
+      "status": "open",
+      "suppression_reason": null,
+      "title": "MySQL source connection has no ssl_config, so CDC replication traffic is unencrypted in transit",
+      "unresolved_since": "2026-09-02"
     },
     {
-      "id": "HOLDEN_AI_002",
-      "status": "fixed",
-      "first_seen": "2026-09-02",
-      "last_seen": "2026-09-02",
-      "unresolved_since": null,
-      "suppression_reason": null,
-      "principle": "data-protection",
-      "severity": "MEDIUM",
       "confidence": "high",
-      "title": "Module forces the source password through Terraform state; secret_manager_stored_password is never offered",
+      "explanation": "mysql_profile accepts secret_manager_stored_password as an alternative to an inline password (confirmed against the pinned provider schema), which keeps the credential in Secret Manager and out of state. The module only wires password, and var.source_mysql makes it a required attribute, so no caller can choose the safer path. The README already concedes the password 'still lands in state' \u2014 that is a module limitation, not an inherent one. Secret detection rules do not fire here because the value is a variable reference, not a literal, so this is invisible to pattern matching.",
       "file": "google_datastream_connection_profile.source.tf",
+      "first_seen": "2026-09-02",
+      "fix": "    secret_manager_stored_password = var.source_mysql.secret_manager_stored_password",
+      "fixable": true,
+      "id": "HOLDEN_AI_002",
+      "last_seen": "2026-09-02",
       "line": 11,
-      "resource": "google_datastream_connection_profile.source",
+      "principle": "data-protection",
       "related_resources": [
         "variable.source_mysql"
       ],
-      "explanation": "mysql_profile accepts secret_manager_stored_password as an alternative to an inline password (confirmed against the pinned provider schema), which keeps the credential in Secret Manager and out of state. The module only wires password, and var.source_mysql makes it a required attribute, so no caller can choose the safer path. The README already concedes the password 'still lands in state' — that is a module limitation, not an inherent one. Secret detection rules do not fire here because the value is a variable reference, not a literal, so this is invisible to pattern matching.",
       "remediation": "Replaced password with secret_manager_stored_password on var.source_mysql; the inline path was removed entirely rather than kept alongside, so no caller can route the credential through state.",
-      "fixable": true,
-      "fix": "    secret_manager_stored_password = var.source_mysql.secret_manager_stored_password"
+      "resource": "google_datastream_connection_profile.source",
+      "severity": "MEDIUM",
+      "status": "fixed",
+      "suppression_reason": null,
+      "title": "Module forces the source password through Terraform state; secret_manager_stored_password is never offered",
+      "unresolved_since": null
     },
     {
-      "id": "HOLDEN_AI_003",
-      "status": "open",
-      "first_seen": "2026-09-02",
-      "last_seen": "2026-09-02",
-      "unresolved_since": "2026-09-02",
-      "suppression_reason": null,
-      "principle": "reliability",
-      "severity": "MEDIUM",
       "confidence": "high",
-      "title": "Example grants CMEK access to the Datastream service agent only, contradicting its own README",
+      "explanation": "README.md:57-58 states that 'the Datastream and BigQuery service agents each need roles/cloudkms.cryptoKeyEncrypterDecrypter' on the key, but the example creates exactly one binding, for the Datastream agent. The stream sets kms_key_name on dataset_template, so Datastream asks BigQuery to create CMEK-encrypted datasets, and that requires the BigQuery encryption service agent to hold the role. This is an intent-vs-configuration mismatch across three files plus prose; no single-resource rule can see it, and both resources pass their own checks.",
       "file": "example/examplea/google_kms_crypto_key_iam_member.datastream_service_agent.tf",
+      "first_seen": "2026-09-02",
+      "fix": "data \"google_bigquery_default_service_account\" \"datastream\" {}\n\nresource \"google_kms_crypto_key_iam_member\" \"bigquery_service_agent\" {\n  crypto_key_id = google_kms_crypto_key.datastream.id\n  role          = \"roles/cloudkms.cryptoKeyEncrypterDecrypter\"\n  member        = \"serviceAccount:${data.google_bigquery_default_service_account.datastream.email}\"\n}",
+      "fixable": true,
+      "id": "HOLDEN_AI_003",
+      "last_seen": "2026-09-02",
       "line": 1,
-      "resource": "google_kms_crypto_key_iam_member.datastream_service_agent",
+      "principle": "reliability",
       "related_resources": [
         "google_datastream_stream.main",
         "google_kms_crypto_key.datastream"
       ],
-      "explanation": "README.md:57-58 states that 'the Datastream and BigQuery service agents each need roles/cloudkms.cryptoKeyEncrypterDecrypter' on the key, but the example creates exactly one binding, for the Datastream agent. The stream sets kms_key_name on dataset_template, so Datastream asks BigQuery to create CMEK-encrypted datasets, and that requires the BigQuery encryption service agent to hold the role. This is an intent-vs-configuration mismatch across three files plus prose; no single-resource rule can see it, and both resources pass their own checks.",
       "remediation": "Add a google_bigquery_default_service_account data source and a second google_kms_crypto_key_iam_member granting it the same role, then add it to the module's depends_on.",
-      "fixable": true,
-      "fix": "data \"google_bigquery_default_service_account\" \"datastream\" {}\n\nresource \"google_kms_crypto_key_iam_member\" \"bigquery_service_agent\" {\n  crypto_key_id = google_kms_crypto_key.datastream.id\n  role          = \"roles/cloudkms.cryptoKeyEncrypterDecrypter\"\n  member        = \"serviceAccount:${data.google_bigquery_default_service_account.datastream.email}\"\n}"
+      "resource": "google_kms_crypto_key_iam_member.datastream_service_agent",
+      "severity": "MEDIUM",
+      "status": "open",
+      "suppression_reason": null,
+      "title": "Example grants CMEK access to the Datastream service agent only, contradicting its own README",
+      "unresolved_since": "2026-09-02"
     },
     {
-      "id": "HOLDEN_AI_004",
-      "status": "open",
-      "first_seen": "2026-09-02",
-      "last_seen": "2026-09-02",
-      "unresolved_since": "2026-09-02",
-      "suppression_reason": null,
-      "principle": "network-security",
-      "severity": "LOW",
       "confidence": "medium",
-      "title": "Example VPC has no subnet or firewall rule, so the private connection it demonstrates cannot reach the source it names",
+      "explanation": "The network is custom-mode (auto_create_subnetworks = false) and the example defines no subnet, no firewall rule and no source database, yet passes source_mysql.hostname = 10.90.0.10 as though that address were routable over the peering. The example therefore documents a private-connectivity pattern it does not actually implement, and a reader who copies it will get a stream that cannot connect. This is also why HLD_GCP_093 fires on the example. The composition is only visible across the module boundary, so no single-resource rule reaches it.",
       "file": "example/examplea/google_compute_network.datastream.tf",
+      "first_seen": "2026-09-02",
+      "fixable": false,
+      "id": "HOLDEN_AI_004",
+      "last_seen": "2026-09-02",
       "line": 1,
-      "resource": "google_compute_network.datastream",
+      "principle": "network-security",
       "related_resources": [
         "google_datastream_private_connection.main",
         "module.datastream"
       ],
-      "explanation": "The network is custom-mode (auto_create_subnetworks = false) and the example defines no subnet, no firewall rule and no source database, yet passes source_mysql.hostname = 10.90.0.10 as though that address were routable over the peering. The example therefore documents a private-connectivity pattern it does not actually implement, and a reader who copies it will get a stream that cannot connect. This is also why HLD_GCP_093 fires on the example. The composition is only visible across the module boundary, so no single-resource rule reaches it.",
       "remediation": "Either add the missing subnet and an ingress firewall rule permitting the peered /29 to reach the source port, or add a comment stating that the source network is assumed to exist out of band and 10.90.0.10 is illustrative.",
-      "fixable": false
+      "resource": "google_compute_network.datastream",
+      "severity": "LOW",
+      "status": "open",
+      "suppression_reason": null,
+      "title": "Example VPC has no subnet or firewall rule, so the private connection it demonstrates cannot reach the source it names",
+      "unresolved_since": "2026-09-02"
     }
   ],
+  "scan_date": "2026-09-02T00:00:00Z",
+  "scan_path": ".",
   "suggested_policies": [
     {
       "rationale": "Datastream connects to source databases over the network, and the provider exposes ssl_config on mysql_profile/postgresql_profile/oracle_profile. Omitting it means plaintext replication of every row plus the credential handshake. coverage_by_type has no entry at all for google_datastream_connection_profile, so nothing in the catalog checks transit for this resource type. The condition is a single unambiguous attribute path and fires correctly on any MySQL connection profile.",
@@ -118,37 +118,37 @@
   ],
   "suggested_suppressions": [
     {
+      "accepted": true,
+      "applied": "2026-09-02",
+      "confidence": "high",
+      "file": "example/examplea/google_compute_network.datastream.tf",
+      "line": 1,
       "policy_id": "HLD_GCP_303",
-      "file": "example/examplea/google_compute_network.datastream.tf",
-      "line": 1,
+      "reason": "The network carries no workloads that egress: it is custom-mode with no subnet and no instance, and exists only as the peering target for google_datastream_private_connection.main (module.datastream, network = google_compute_network.datastream.id). Datastream's private connectivity traverses the VPC peering, not the default internet gateway, so the replacement route the policy asks for would have no consumer \u2014 and a 0.0.0.0/0 route to default-internet-gateway would reintroduce precisely the egress path HLD_GCP_094 required be deleted.",
       "resource": "google_compute_network.datastream",
-      "reason": "The network carries no workloads that egress: it is custom-mode with no subnet and no instance, and exists only as the peering target for google_datastream_private_connection.main (module.datastream, network = google_compute_network.datastream.id). Datastream's private connectivity traverses the VPC peering, not the default internet gateway, so the replacement route the policy asks for would have no consumer — and a 0.0.0.0/0 route to default-internet-gateway would reintroduce precisely the egress path HLD_GCP_094 required be deleted.",
-      "suppression_comment": "# holden:ignore:HLD_GCP_303: peering-only VPC with no subnets or instances — Datastream traffic uses the peering, nothing egresses, so a replacement route would have no consumer",
-      "confidence": "high",
-      "accepted": true,
-      "applied": "2026-09-02"
+      "suppression_comment": "# holden:ignore:HLD_GCP_303: peering-only VPC with no subnets or instances \u2014 Datastream traffic uses the peering, nothing egresses, so a replacement route would have no consumer"
     },
     {
+      "accepted": true,
+      "applied": "2026-09-02",
+      "confidence": "high",
+      "file": "example/examplea/google_compute_network.datastream.tf",
+      "line": 1,
       "policy_id": "HLD_GCP_544",
-      "file": "example/examplea/google_compute_network.datastream.tf",
-      "line": 1,
+      "reason": "Same composition: with no subnet and no instance in the network, nothing inside it ever resolves googleapis.com, so a private DNS zone pointing those names at a VIP range would serve no client. The policy's premise \u2014 a workload relying on Private Google Access \u2014 does not hold for a VPC that exists solely to host a Datastream peering range.",
       "resource": "google_compute_network.datastream",
-      "reason": "Same composition: with no subnet and no instance in the network, nothing inside it ever resolves googleapis.com, so a private DNS zone pointing those names at a VIP range would serve no client. The policy's premise — a workload relying on Private Google Access — does not hold for a VPC that exists solely to host a Datastream peering range.",
-      "suppression_comment": "# holden:ignore:HLD_GCP_544: peering-only VPC with no subnets or instances — nothing in it resolves googleapis.com, so a private DNS zone has no client",
-      "confidence": "high",
-      "accepted": true,
-      "applied": "2026-09-02"
+      "suppression_comment": "# holden:ignore:HLD_GCP_544: peering-only VPC with no subnets or instances \u2014 nothing in it resolves googleapis.com, so a private DNS zone has no client"
     },
     {
-      "policy_id": "HLD_TF_050",
+      "accepted": true,
+      "applied": "2026-09-02",
+      "confidence": "high",
       "file": "example/examplea/variables.tf",
       "line": 1,
-      "resource": "var.source_password_secret_version",
+      "policy_id": "HLD_TF_050",
       "reason": "Holds a Secret Manager version resource name, not a credential. The rule matches on the substring password in the variable name; the value is deliberately non-secret, which is the entire point of passing it instead of the password.",
-      "suppression_comment": "# holden:ignore:HLD_TF_050: holds a Secret Manager version resource name, not a credential",
-      "confidence": "high",
-      "accepted": true,
-      "applied": "2026-09-02"
+      "resource": "var.source_password_secret_version",
+      "suppression_comment": "# holden:ignore:HLD_TF_050: holds a Secret Manager version resource name, not a credential"
     }
   ]
 }
